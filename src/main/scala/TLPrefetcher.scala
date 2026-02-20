@@ -111,8 +111,55 @@ class TLPrefetcher(implicit p: Parameters) extends LazyModule {
       when (!legal || !legal_address) {
         out_arb.io.out.ready := true.B
       }
+
+      // Debug counters for prefetcher diagnostics fromp refetcher side
+      val dbg_snoop_count = RegInit(0.U(64.W))
+      val dbg_snoop_dcache = RegInit(0.U(64.W))
+      val dbg_pf_request = RegInit(0.U(64.W))
+      val dbg_pf_sent = RegInit(0.U(64.W))
+      val dbg_pf_dropped = RegInit(0.U(64.W))
+      when (snoop.valid) { dbg_snoop_count := dbg_snoop_count + 1.U }
+      when (snoop.valid && snoop_client === 0.U) { dbg_snoop_dcache := dbg_snoop_dcache + 1.U }
+      when (out_arb.io.out.valid) { dbg_pf_request := dbg_pf_request + 1.U }
+      when (out.a.fire && !in.a.valid) { dbg_pf_sent := dbg_pf_sent + 1.U }
+      when (out_arb.io.out.valid && (!legal || !legal_address)) { dbg_pf_dropped := dbg_pf_dropped + 1.U }
+
+      val dbg_print = Module(new PrefetcherDebugFinalPrint)
+      dbg_print.io.snoop_count  := dbg_snoop_count
+      dbg_print.io.snoop_dcache := dbg_snoop_dcache
+      dbg_print.io.pf_request   := dbg_pf_request
+      dbg_print.io.pf_sent      := dbg_pf_sent
+      dbg_print.io.pf_dropped   := dbg_pf_dropped
     }
   }
+}
+
+
+// Super sketch chat-gpt generated final print lmaoo
+class PrefetcherDebugFinalPrint extends BlackBox with HasBlackBoxInline {
+  val io = IO(new Bundle {
+    val snoop_count  = Input(UInt(64.W))
+    val snoop_dcache = Input(UInt(64.W))
+    val pf_request   = Input(UInt(64.W))
+    val pf_sent      = Input(UInt(64.W))
+    val pf_dropped   = Input(UInt(64.W))
+  })
+  setInline("PrefetcherDebugFinalPrint.sv",
+    s"""|module PrefetcherDebugFinalPrint(
+        |  input [63:0] snoop_count,
+        |  input [63:0] snoop_dcache,
+        |  input [63:0] pf_request,
+        |  input [63:0] pf_sent,
+        |  input [63:0] pf_dropped
+        |);
+        |`ifndef SYNTHESIS
+        |  final begin
+        |    $$display("PREFETCHER_DEBUG snoops=%0d dcache_snoops=%0d pf_gen=%0d pf_sent=%0d pf_dropped=%0d",
+        |      snoop_count, snoop_dcache, pf_request, pf_sent, pf_dropped);
+        |  end
+        |`endif
+        |endmodule
+        |""".stripMargin)
 }
 
 object TLPrefetcher {
