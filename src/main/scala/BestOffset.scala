@@ -116,9 +116,8 @@ class BestOffsetPrefetcher(params: BestOffsetPrefetcherParams)(implicit p: Param
   // ==================================================================
   // Prefetch generation
   // ==================================================================
-  val prefBase  = Reg(UInt())
-  val prefWrite = Reg(Bool())
-  val prefCnt   = RegInit(params.degree.U(log2Ceil(params.degree + 1).max(1).W))
+  val prefBase = Reg(UInt())
+  val prefCnt  = RegInit(params.degree.U(log2Ceil(params.degree + 1).max(1).W))
 
   // Handle request.fire first so the snoop restart (below) takes priority
   // via Chisel last-connection-wins semantics.
@@ -126,17 +125,25 @@ class BestOffsetPrefetcher(params: BestOffsetPrefetcherParams)(implicit p: Param
     prefCnt := prefCnt + 1.U
   }
 
-  // On each snoop with a valid best offset, begin a new prefetch burst
-  when(io.snoop.valid && bestOffsetValid) {
-    prefBase  := snoopBlock
-    prefWrite := io.snoop.bits.write
-    prefCnt   := 0.U
+  // On each snoop with a valid best offset, begin a new prefetch burst.
+  // Only trigger on reads: write-intent prefetches to speculative addresses
+  // can allocate dirty cache lines at wrong physical addresses, which get
+  // written back and corrupt memory (including MMIO regions on wrap-around).
+  when(io.snoop.valid && bestOffsetValid && !io.snoop.bits.write) {
+    prefBase := snoopBlock
+    prefCnt  := 0.U
   }
 
   val bestOffset = offsetROM(bestOffsetIdx)
   val prefActive = prefCnt < params.degree.U
 
-  io.request.valid        := prefActive
-  io.request.bits.address := (prefBase + (prefCnt +& 1.U) * bestOffset) << blockBits
-  io.request.bits.write   := prefWrite
+  // Use +& (carry-preserving add) to detect address block overflow.
+  // If the sum is wider than prefBase, the extra MSB signals wrap-around;
+  // suppress the prefetch rather than sending it to a wrong physical address.
+  val prefAddrBlock = prefBase +& ((prefCnt +& 1.U) * bestOffset)
+  val prefOverflow  = prefAddrBlock(prefAddrBlock.getWidth - 1)
+
+  io.request.valid        := prefActive && !prefOverflow
+  io.request.bits.address := prefAddrBlock(prefBase.getWidth - 1, 0) << blockBits
+  io.request.bits.write   := false.B
 }
