@@ -7,6 +7,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.subsystem._
+import midas.targetutils.PerfCounter
 
 case class TLPrefetcherParams(
   prefetchIds: Int = 4,
@@ -130,6 +131,22 @@ class TLPrefetcher(implicit p: Parameters) extends LazyModule {
       dbg_print.io.pf_request   := dbg_pf_request
       dbg_print.io.pf_sent      := dbg_pf_sent
       dbg_print.io.pf_dropped   := dbg_pf_dropped
+
+      // More autocounters for firsim 
+      val evt_snoop           = WireInit(snoop.valid)
+      val evt_snoop_dcache    = WireInit(snoop.valid && snoop_client === 0.U)
+      val evt_pf_request      = WireInit(out_arb.io.out.valid)
+      val evt_pf_sent         = WireInit(out.a.fire && !in.a.valid)
+      val evt_pf_dropped      = WireInit(out_arb.io.out.valid && (!legal || !legal_address))
+      val evt_pf_blocked_demand  = WireInit(out_arb.io.out.valid && in.a.valid)
+      val evt_pf_blocked_tracker = WireInit(out_arb.io.out.valid && !tracker_free)
+      PerfCounter(evt_snoop,              "tlpf_snoop",              "TLPrefetcher snoop events")
+      PerfCounter(evt_snoop_dcache,       "tlpf_snoop_dcache",       "TLPrefetcher DCache snoop events")
+      PerfCounter(evt_pf_request,         "tlpf_pf_request",         "TLPrefetcher prefetch requests generated")
+      PerfCounter(evt_pf_sent,            "tlpf_pf_sent",            "TLPrefetcher prefetch Hints sent to L2")
+      PerfCounter(evt_pf_dropped,         "tlpf_pf_dropped",         "TLPrefetcher prefetch dropped (illegal addr)")
+      PerfCounter(evt_pf_blocked_demand,  "tlpf_pf_blocked_demand",  "TLPrefetcher prefetch blocked by demand req")
+      PerfCounter(evt_pf_blocked_tracker, "tlpf_pf_blocked_tracker", "TLPrefetcher prefetch blocked by full tracker")
     }
   }
 }
