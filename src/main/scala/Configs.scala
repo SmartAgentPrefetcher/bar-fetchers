@@ -24,3 +24,15 @@ class WithBestOffsetPrefetcher(p: BestOffsetPrefetcherParams = BestOffsetPrefetc
     prefetcher = (s: String) => if (s.contains("DCache") && !s.contains("MMIO")) Some(p) else up(TLPrefetcherKey).prefetcher(s)
   )
 })
+
+class WithCyclicStridePrefetcher(p: CyclicStridePrefetcherParams = CyclicStridePrefetcherParams()) extends Config((site, here, up) => {
+  case TLPrefetcherKey => up(TLPrefetcherKey).copy(
+    prefetcher = (s: String) => if (s.contains("DCache") && !s.contains("MMIO")) Some(p) else up(TLPrefetcherKey).prefetcher(s)
+  )
+})
+
+class WithEvolvedPrefetcher(p: EvolvedPrefetcherParams = EvolvedPrefetcherParams()) extends Config((site, here, up) => {
+  case TLPrefetcherKey => up(TLPrefetcherKey).copy(
+    prefetcher = (s: String) => if (s.contains("DCache") && !s.contains("MMIO")) Some(p) else up(TLPrefetcherKey).prefetcher(s)
+  )
+})
