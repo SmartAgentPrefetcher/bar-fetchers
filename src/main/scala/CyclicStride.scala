@@ -161,7 +161,7 @@ class CyclicStridePrefetcher(params: CyclicStridePrefetcherParams)(implicit p: P
             when (k.U === bestIdx) {
               template(k) := curDelta
             }.elsewhen (k.U < bestIdx) {
-              template(k) := MuxLookup(bestIdx - 1.U - k.U, deltaHist(0),
+              template(k) := MuxLookup(bestIdx - 1.U - k.U, deltaHist(0))(
                 (0 until params.historyLen).map(i => i.U -> deltaHist(i)))
             }
           }

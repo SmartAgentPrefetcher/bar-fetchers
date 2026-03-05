@@ -116,7 +116,8 @@ class BestOffsetPrefetcher(params: BestOffsetPrefetcherParams)(implicit p: Param
   // ==================================================================
   // Prefetch generation
   // ==================================================================
-  val prefBase = Reg(UInt())
+  val addrBlockBits = 48  // matches rrTable entry width
+  val prefBase = RegInit(0.U(addrBlockBits.W))
   val prefCnt  = RegInit(params.degree.U(log2Ceil(params.degree + 1).max(1).W))
 
   // Handle request.fire first so the snoop restart (below) takes priority
@@ -141,9 +142,9 @@ class BestOffsetPrefetcher(params: BestOffsetPrefetcherParams)(implicit p: Param
   // If the sum is wider than prefBase, the extra MSB signals wrap-around;
   // suppress the prefetch rather than sending it to a wrong physical address.
   val prefAddrBlock = prefBase +& ((prefCnt +& 1.U) * bestOffset)
-  val prefOverflow  = prefAddrBlock(prefAddrBlock.getWidth - 1)
+  val prefOverflow  = prefAddrBlock(addrBlockBits)  // carry bit above the 48-bit block address
 
   io.request.valid        := prefActive && !prefOverflow
-  io.request.bits.address := prefAddrBlock(prefBase.getWidth - 1, 0) << blockBits
+  io.request.bits.address := prefAddrBlock(addrBlockBits - 1, 0) << blockBits
   io.request.bits.write   := false.B
 }
