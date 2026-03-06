@@ -39,20 +39,26 @@ class TLPrefetcher(implicit p: Parameters) extends LazyModule {
       val outIdMap = edgeOut.master.clients.map(_.sourceId)
       val inIdMap = edgeIn.master.clients.map(_.sourceId)
 
-      val snoop = Wire(Valid(new Snoop))
+      // Derive address width from the TileLink bus and pass it to prefetcher bundles
+      // via CDE. This ensures all prefetchers (across Rocket/BOOM/etc.) produce the
+      // same port interface, which is required for Vivado PR RM swaps.
+      val addrBits = edgeOut.bundle.addressBits
+      val pWithAddr: Parameters = p.alterPartial { case PrefetchAddressBits => addrBits }
+
+      val snoop = Wire(Valid(new Snoop()(pWithAddr)))
       val snoop_client = Wire(UInt(log2Ceil(nClients).W))
 
       // Implement prefetchers per client.
       val prefetchers = edgeOut.master.clients.zipWithIndex.map { case (c,i) =>
         val pParams = params.prefetcher(c.name).getOrElse(NullPrefetcherParams())
-        println(s"Prefetcher for ${c.name}: ${pParams.desc}")
-        val prefetcher = pParams.instantiate()
+        println(s"Prefetcher for ${c.name}: ${pParams.desc} (addressBits=$addrBits)")
+        val prefetcher = pParams.instantiate()(pWithAddr)
         prefetcher.io.snoop.valid := snoop.valid && snoop_client === i.U
         prefetcher.io.snoop.bits := snoop.bits
         prefetcher
       }
 
-      val out_arb = Module(new RRArbiter(new Prefetch, nClients))
+      val out_arb = Module(new RRArbiter(new Prefetch()(pWithAddr), nClients))
       out_arb.io.in <> prefetchers.map(_.io.request)
 
       val tracker = RegInit(0.U(params.prefetchIds.W))
